@@ -1,0 +1,49 @@
+---
+name: iac aws resource
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "target environment name"
+        required: true
+      destroy:
+        description: "Destroy the resource"
+        required: false
+        default: false
+jobs:
+  deploy_source:
+    name: eks resource
+    runs-on: ubuntu-latest
+    env:
+      bucket: terraform-backend-buckets-tfn
+    steps:
+      - name: checkout
+        uses: actions/checkout@v1
+      - name: setup terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.0.5
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.SECRET_KEY }}
+          aws-region: eu-central-1
+      - name: init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.bucket }}" \
+            -backend-config="key=${{ github.event.inputs.name }}/tfstate.tfstate" \
+            -backend-config="region=eu-central-1" \
+            -backend=true
+      - name: validate
+        run: terraform validate
+      - name: plan
+        run: terraform plan -var-file="${{ github.event.inputs.name }}-config.tfvars"
+      - name: apply
+        run: terraform apply -var-file="${{ github.event.inputs.name }}-config.tfvars" -auto-approve
+      - name: show
+        run: terraform show
+      - name: destroy
+        if: github.event.inputs.destroy == 'true'
+        run: terraform destroy -var-file="${{ github.event.inputs.name }}-config.tfvars" -auto-approve
